@@ -1,0 +1,21 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+
+# Local config / runtime state (never commit pairing keys or certs)
+*.pem
+*.key
+screenlink-config/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Installer output
+/installer/Output
+/dist

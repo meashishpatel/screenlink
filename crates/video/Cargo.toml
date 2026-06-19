@@ -1,0 +1,21 @@
+[package]
+name = "screenlink-video"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Phase 2 (Extend mode) capture/encode/decode/present. Feature-gated."
+
+[features]
+# Phase 2 is OFF by default. Building with --features extend pulls in the
+# (currently stubbed) virtual-display + capture/encode pipeline.
+default = []
+extend = []
+
+[dependencies]
+screenlink-core = { path = "../core" }
+serde = { workspace = true }
+postcard = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Full build incl. the egui GUI, plus lint/format. Windows is the primary target.
+  windows:
+    name: Windows (full + lint)
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets
+      - name: Build
+        run: cargo build --workspace --release
+      - name: Test
+        run: cargo test --workspace
+
+  # Cross-platform compile-check + tests for the shared/headless code (transport,
+  # protocol, crypto, input abstraction, and the loopback integration test). The
+  # GUI is skipped here (--no-default-features) to avoid desktop system-lib setup.
+  cross:
+    name: ${{ matrix.os }} (headless)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (headless)
+        run: cargo build --workspace --no-default-features
+      - name: Test (headless, incl. loopback)
+        run: cargo test --workspace --no-default-features

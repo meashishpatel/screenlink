@@ -1,0 +1,15 @@
+[package]
+name = "screenlink-discovery"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "LAN discovery (mDNS) and manual peers for ScreenLink."
+
+[dependencies]
+screenlink-core = { path = "../core" }
+mdns-sd = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
