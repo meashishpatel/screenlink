@@ -13,6 +13,25 @@ Mouse Without Borders, written in Rust as a single small native binary.
 
 ---
 
+## Download
+
+Grab the latest Windows build from the
+**[Releases page »](https://github.com/meashishpatel/screenlink/releases/latest)**
+— no need to build from source.
+
+| Download | What it is |
+|----------|------------|
+| **`ScreenLink-Setup-<version>.exe`** | Installer (recommended) — installs to Program Files, adds a Start-menu shortcut and the firewall rules, and registers an uninstaller. |
+| **`ScreenLink-<version>-x64.exe`** | Standalone / portable — just run it, no install. Windows will prompt for firewall access on first use. |
+
+Requires Windows 10 (2004+) or Windows 11, x64. On first run, allow ScreenLink
+through the firewall on **Private** networks.
+
+> The binaries are not yet code-signed, so Windows SmartScreen may warn the first
+> time — click **More info → Run anyway**.
+
+---
+
 ## Two modes
 
 | Mode | What it does | Status |
