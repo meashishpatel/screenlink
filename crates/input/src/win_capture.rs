@@ -57,8 +57,9 @@ impl WinCapturer {
         std::thread::Builder::new()
             .name("screenlink-hooks".into())
             .spawn(|| unsafe {
-                let hinst: HINSTANCE =
-                    GetModuleHandleW(None).map(HINSTANCE::from).unwrap_or_default();
+                let hinst: HINSTANCE = GetModuleHandleW(None)
+                    .map(HINSTANCE::from)
+                    .unwrap_or_default();
                 let mouse = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), hinst, 0);
                 let kbd = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), hinst, 0);
                 if mouse.is_err() || kbd.is_err() {
