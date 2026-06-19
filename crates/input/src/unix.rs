@@ -100,9 +100,10 @@ fn apply_event(enigo: &mut Enigo, ev: InputEvent, w: i32, h: i32) {
             let py = (y.clamp(0.0, 1.0) * h as f32).round() as i32;
             enigo.move_mouse(px, py, Coordinate::Abs)
         }
-        InputEvent::MouseButton { button, pressed } => {
-            enigo.button(to_button(button), dir(pressed))
-        }
+        InputEvent::MouseButton { button, pressed } => match to_button(button) {
+            Some(b) => enigo.button(b, dir(pressed)),
+            None => Ok(()),
+        },
         InputEvent::MouseWheel { dx, dy } => {
             if dy != 0 {
                 enigo.scroll(-dy, Axis::Vertical)
@@ -131,14 +132,19 @@ fn dir(pressed: bool) -> Direction {
     }
 }
 
-fn to_button(b: MouseButton) -> Button {
-    match b {
+fn to_button(b: MouseButton) -> Option<Button> {
+    Some(match b {
         MouseButton::Left => Button::Left,
         MouseButton::Right => Button::Right,
         MouseButton::Middle => Button::Middle,
+        // `Back`/`Forward` exist on Linux/Windows enigo but not macOS.
+        #[cfg(not(target_os = "macos"))]
         MouseButton::X1 => Button::Back,
+        #[cfg(not(target_os = "macos"))]
         MouseButton::X2 => Button::Forward,
-    }
+        #[cfg(target_os = "macos")]
+        MouseButton::X1 | MouseButton::X2 => return None,
+    })
 }
 
 /// Best-effort map from the portable key model to enigo. Returns `None` for keys
