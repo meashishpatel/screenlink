@@ -12,6 +12,12 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 
+# Linux + macOS injection (client) via enigo, and capture/grab (host, experimental)
+# via rdev.
+[target.'cfg(unix)'.dependencies]
+enigo = "0.3"
+rdev = { version = "0.5", features = ["unstable_grab"] }
+
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",

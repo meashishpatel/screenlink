@@ -51,8 +51,10 @@ pub trait Capturer: Send {
 
 #[cfg(windows)]
 mod keymap_win;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, unix)))]
 mod stub;
+#[cfg(unix)]
+mod unix;
 #[cfg(windows)]
 mod win_capture;
 #[cfg(windows)]
@@ -84,7 +86,11 @@ pub fn new_injector() -> anyhow::Result<Box<dyn Injector>> {
     {
         Ok(Box::new(win_inject::WinInjector::new()))
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        Ok(Box::new(unix::EnigoInjector::new()?))
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         Ok(Box::new(stub::StubInjector::default()))
     }
@@ -96,7 +102,12 @@ pub fn new_capturer() -> anyhow::Result<Box<dyn Capturer>> {
     {
         Ok(Box::new(win_capture::WinCapturer::start()?))
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        // Experimental: global grab via rdev (X11 / macOS). See unix.rs.
+        Ok(Box::new(unix::RdevCapturer::start()?))
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         Ok(Box::new(stub::StubCapturer::default()))
     }

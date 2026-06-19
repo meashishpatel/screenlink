@@ -105,10 +105,15 @@ magick assets/icon.svg -background none -define icon:auto-resize=256,64,48,32,16
 
 Windows-first, with portable seams. The shared core (discovery, pairing, TLS
 transport, encrypted UDP, clipboard, and the **portable key model**) is
-compile-checked and tested on **Windows, Linux, and macOS** in CI. Native input
-**capture/injection** is implemented on Windows today; Linux (X11/`uinput`) and
-macOS (`CGEvent`) backends are next and plug into the same traits. See
-[docs/cross-platform.md](docs/cross-platform.md) for the status matrix and plan.
+compile-checked and tested on **Windows, Linux, and macOS** in CI.
+
+- **Windows:** full host **and** client (native capture + injection) — verified.
+- **Linux / macOS:** **client** (be controlled) via a cross-platform injection
+  backend, and **host** (control others) via a global input grab — both compile in
+  CI but are **experimental** and need on-device testing. Linux requires **X11**
+  (not Wayland); macOS requires **Accessibility + Input Monitoring** permission.
+
+See [docs/cross-platform.md](docs/cross-platform.md) for the full status matrix.
 
 ## Build & run
 

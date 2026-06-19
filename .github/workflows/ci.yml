@@ -45,6 +45,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install Linux input deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxdo-dev libx11-dev libxtst-dev libxi-dev libxkbcommon-dev libevdev-dev
+      # Headless build still compiles the Unix input backend (enigo injection),
+      # so cross-platform input code is compile-checked here even without the GUI.
       - name: Build (headless)
         run: cargo build --workspace --no-default-features
       - name: Test (headless, incl. loopback)

@@ -12,12 +12,27 @@ the plan for the remaining backends.
 | Clipboard text sync (`arboard`) | ✅ | ✅ | ✅ |
 | Settings GUI (egui) | ✅ | ✅¹ | ✅¹ |
 | **Portable key model** (`core::protocol::Key`) | ✅ | ✅ | ✅ |
-| **Input injection** (be a *client*) | ✅ | ⏳ | ⏳ |
-| **Input capture** (be a *host*) | ✅ | ⏳ | ⏳ |
+| **Input injection** (be a *client*) | ✅ | ✅¹ | ✅¹ |
+| **Input capture** (be a *host*) | ✅ | 🧪² | 🧪² |
 | Extend mode (wireless monitor) | ⏳ Phase 2 | ✕ | ✕ |
 
-✅ done · ⏳ planned/next · ✕ not applicable
-¹ GUI builds on Linux/macOS but needs the desktop system libraries below.
+✅ done · 🧪 experimental (compiles in CI; needs on-device testing) · ⏳ planned · ✕ n/a
+¹ Injection on Linux/macOS uses the cross-platform `enigo` backend
+(`crates/input/src/unix.rs`); it compiles in CI but its runtime behavior needs
+verification on a real Linux/macOS box. Key mapping is best-effort. macOS requires
+the user to grant **Accessibility** permission. GUI builds on Linux/macOS but needs
+the desktop system libraries below.
+
+² Capture/host on Linux/macOS uses a global input grab (`rdev`,
+`crates/input/src/unix.rs`). It compiles in CI but is **experimental**: it needs
+real on-device testing, works on **X11** (not Wayland) on Linux, needs macOS
+**Accessibility + Input Monitoring** permission, suppression is best-effort on
+Linux, and edge detection currently assumes a 1920×1080 desktop until a per-OS
+display-size query is added.
+
+With injection + capture on every OS, **any device can in principle control any
+other** — Windows↔Windows is verified; the Linux/macOS paths are experimental and
+need validation on real hardware.
 
 The shared code (everything except input injection/capture and the GUI system
 deps) is compile-checked **and** unit/loopback-tested on Windows, Linux, and
