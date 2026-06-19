@@ -19,16 +19,25 @@ Grab the latest Windows build from the
 **[Releases page »](https://github.com/meashishpatel/screenlink/releases/latest)**
 — no need to build from source.
 
-| Download | What it is |
-|----------|------------|
-| **`ScreenLink-Setup-<version>.exe`** | Installer (recommended) — installs to Program Files, adds a Start-menu shortcut and the firewall rules, and registers an uninstaller. |
-| **`ScreenLink-<version>-x64.exe`** | Standalone / portable — just run it, no install. Windows will prompt for firewall access on first use. |
+| Download | Platform | What it is |
+|----------|----------|------------|
+| **`ScreenLink-Setup-<version>.exe`** | Windows | Installer (recommended) — installs to Program Files, adds a Start-menu shortcut and the firewall rules, and registers an uninstaller. |
+| **`ScreenLink-<version>-x64.exe`** | Windows | Standalone / portable — just run it, no install. |
+| **`ScreenLink-<version>-linux-x64.tar.gz`** | Linux | Extract and run `./screenlink`. **Experimental** (see below). |
+| **`ScreenLink-<version>-macos-arm64.tar.gz`** | macOS (Apple Silicon) | Extract and run `./screenlink`. **Experimental** (see below). |
 
-Requires Windows 10 (2004+) or Windows 11, x64. On first run, allow ScreenLink
-through the firewall on **Private** networks.
+Windows is fully supported (host **and** client). **Linux/macOS builds are
+experimental** and need on-device verification:
 
-> The binaries are not yet code-signed, so Windows SmartScreen may warn the first
-> time — click **More info → Run anyway**.
+- **Windows:** allow it through the firewall on **Private** networks on first run.
+- **Linux:** requires an **X11** session (not Wayland).
+- **macOS:** grant **Accessibility + Input Monitoring** in System Settings, and
+  clear Gatekeeper on the unsigned binary with right-click → **Open** (or
+  `xattr -dr com.apple.quarantine ./screenlink`).
+
+> The binaries are not code-signed, so Windows SmartScreen may warn
+> (**More info → Run anyway**) and macOS Gatekeeper will block until you Open it
+> manually.
 
 ---
 
