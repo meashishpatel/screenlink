@@ -27,6 +27,11 @@ jobs:
   release:
     name: Build & publish Windows binaries
     runs-on: windows-latest
+    # Surface signing secrets as env vars: the `secrets` context can't be used
+    # directly in an `if:` expression, but `env` can. Empty when not configured.
+    env:
+      CODE_SIGN_PFX_BASE64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
+      CODE_SIGN_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -52,11 +57,8 @@ jobs:
       # Optional code signing — set repo secrets CODE_SIGN_PFX_BASE64 +
       # CODE_SIGN_PASSWORD to avoid SmartScreen warnings. Skipped if unset.
       - name: Sign binary
-        if: ${{ secrets.CODE_SIGN_PFX_BASE64 != '' }}
+        if: ${{ env.CODE_SIGN_PFX_BASE64 != '' }}
         shell: pwsh
-        env:
-          CODE_SIGN_PFX_BASE64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
-          CODE_SIGN_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
         run: |
           [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:CODE_SIGN_PFX_BASE64))
           $st = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
