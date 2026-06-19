@@ -416,14 +416,11 @@ async fn run_session(
     // (this is what made pairing intermittently hang).
     let (in_tx, mut in_rx) = mpsc::channel::<ControlMsg>(256);
     let reader = tokio::spawn(async move {
-        loop {
-            match read_msg::<_, ControlMsg>(&mut rd).await {
-                Ok(m) => {
-                    if in_tx.send(m).await.is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break, // peer closed or framing error
+        // Ends when the peer closes / a framing error occurs (read_msg → Err) or
+        // the session drops the receiver (send → Err).
+        while let Ok(m) = read_msg::<_, ControlMsg>(&mut rd).await {
+            if in_tx.send(m).await.is_err() {
+                break;
             }
         }
     });

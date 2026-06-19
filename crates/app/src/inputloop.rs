@@ -86,12 +86,10 @@ pub fn spawn(
                 // Keep the detector's edge in sync with UI changes.
                 det.set_edge(*edge_shared.lock().unwrap());
 
-                if snap_home.swap(false, Ordering::Relaxed) {
-                    if det.force_home().is_some() {
-                        capturer.set_suppress(false);
-                        let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
-                        let _ = events.send(NetEvent::Status("Control snapped home".into()));
-                    }
+                if snap_home.swap(false, Ordering::Relaxed) && det.force_home().is_some() {
+                    capturer.set_suppress(false);
+                    let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
+                    let _ = events.send(NetEvent::Status("Control snapped home".into()));
                 }
 
                 let Some(ev) = capturer.poll(Duration::from_millis(50)) else {
@@ -152,6 +150,18 @@ pub fn spawn(
     handle
 }
 
+/// Map a normalized position along the shared edge to the entry point on the
+/// remote desktop (normalized 0..1, 0..1).
+fn entry_point(edge: ScreenEdge, along: f32) -> (f32, f32) {
+    match edge {
+        // Crossing the host's right edge enters the remote from its left side.
+        ScreenEdge::Right => (0.0, along),
+        ScreenEdge::Left => (1.0, along),
+        ScreenEdge::Bottom => (along, 0.0),
+        ScreenEdge::Top => (along, 1.0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,17 +189,5 @@ mod tests {
         h.on_key(Key::AltRight, true);
         assert!(h.on_key(Key::Home, true));
         assert!(!h.on_key(Key::Home, false));
-    }
-}
-
-/// Map a normalized position along the shared edge to the entry point on the
-/// remote desktop (normalized 0..1, 0..1).
-fn entry_point(edge: ScreenEdge, along: f32) -> (f32, f32) {
-    match edge {
-        // Crossing the host's right edge enters the remote from its left side.
-        ScreenEdge::Right => (0.0, along),
-        ScreenEdge::Left => (1.0, along),
-        ScreenEdge::Bottom => (along, 0.0),
-        ScreenEdge::Top => (along, 1.0),
     }
 }
