@@ -16,6 +16,9 @@
 //! Build with `--features extend` to compile the (still-stub) pipeline entry
 //! points; default builds omit it entirely.
 
+#[cfg(all(windows, feature = "extend"))]
+pub mod capture;
+pub mod codec;
 pub mod pipeline;
 pub mod transport;
 

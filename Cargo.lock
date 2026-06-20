@@ -1652,6 +1652,8 @@ dependencies = [
  "num-traits",
  "png 0.18.1",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3054,11 +3056,13 @@ name = "screenlink-video"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "image",
  "postcard",
  "screenlink-core",
  "serde",
  "thiserror 1.0.69",
  "tracing",
+ "windows",
 ]
 
 [[package]]

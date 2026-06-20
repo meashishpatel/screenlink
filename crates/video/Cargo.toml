@@ -8,9 +8,9 @@ description = "Phase 2 (Extend mode) capture/encode/decode/present. Feature-gate
 
 [features]
 # Phase 2 is OFF by default. Building with --features extend pulls in the
-# (currently stubbed) virtual-display + capture/encode pipeline.
+# Windows screen-capture pipeline (Desktop Duplication).
 default = []
-extend = []
+extend = ["dep:windows"]
 
 [dependencies]
 screenlink-core = { path = "../core" }
@@ -19,3 +19,16 @@ postcard = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+# Software video codec for the screen-mirror MVP (per-frame JPEG). A hardware
+# Media Foundation path can replace this later for lower latency/bandwidth.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+
+# Windows Desktop Duplication capture — only pulled in with --features extend.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
