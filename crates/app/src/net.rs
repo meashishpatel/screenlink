@@ -48,6 +48,8 @@ pub struct AppCore {
     pub injector: Arc<Mutex<Box<dyn Injector>>>,
     pub inbound_rt: Arc<Mutex<Option<RealtimeCrypto>>>,
     pub make_capturer: CapturerFactory,
+    /// Latest decoded frame of a peer's screen being mirrored to us (for the UI).
+    pub video_frame: crate::mirror::FrameSlot,
 }
 
 impl AppCore {
@@ -131,6 +133,13 @@ pub enum NetCommand {
         ip: std::net::IpAddr,
         port: u16,
     },
+    /// Start/stop sharing this machine's screen to the peer (mirror).
+    ShareScreen {
+        fingerprint: String,
+    },
+    StopShareScreen {
+        fingerprint: String,
+    },
 }
 
 /// Internal per-session command (routed from `NetCommand`).
@@ -141,6 +150,8 @@ enum SessionCmd {
     Disconnect,
     SetEdge(ScreenEdge),
     SnapHome,
+    StartMirror,
+    StopMirror,
 }
 
 struct SessionHandle {
@@ -230,6 +241,12 @@ pub async fn run(core: AppCore, mut cmd_rx: mpsc::Receiver<NetCommand>) {
             NetCommand::SnapHome => {
                 broadcast(&sessions, SessionCmd::SnapHome).await;
             }
+            NetCommand::ShareScreen { fingerprint } => {
+                route(&sessions, &fingerprint, SessionCmd::StartMirror).await
+            }
+            NetCommand::StopShareScreen { fingerprint } => {
+                route(&sessions, &fingerprint, SessionCmd::StopMirror).await
+            }
         }
     }
 }
@@ -309,6 +326,7 @@ async fn accept_loop(
             if let Err(e) = run_session(
                 core,
                 key,
+                peer.ip(),
                 Box::new(rd),
                 Box::new(wr),
                 Role::Controlled,
@@ -351,6 +369,7 @@ async fn connect_and_run(
     run_session(
         core,
         key,
+        addr.ip(),
         Box::new(rd),
         Box::new(wr),
         role,
@@ -370,15 +389,23 @@ fn export_key<D>(conn: &rustls::ConnectionCommon<D>) -> anyhow::Result<[u8; 32]>
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 async fn run_session(
     core: AppCore,
     key: [u8; 32],
+    peer_ip: std::net::IpAddr,
     mut rd: BoxRead,
     mut wr: BoxWrite,
     role: Role,
     mut scmd_rx: mpsc::Receiver<SessionCmd>,
     peer_fp_slot: Arc<Mutex<Option<String>>>,
 ) -> anyhow::Result<()> {
+    // Separate key for the video channel so it can't reuse a (key, nonce) pair
+    // with the input channel.
+    let video_key = screenlink_core::realtime::derive_subkey(&key, b"video");
+    // Stop handles for the mirror sender (we share) and receiver (we view).
+    let mut mirror_tx_stop: Option<Arc<std::sync::atomic::AtomicBool>> = None;
+    let mut mirror_rx_stop: Option<Arc<std::sync::atomic::AtomicBool>> = None;
     // --- Hello exchange ---
     write_msg(
         &mut wr,
@@ -553,6 +580,33 @@ async fn run_session(
             msg = in_rx.recv() => {
                 match msg {
                     Some(m) => {
+                        // Mirror start/stop need the session-local stop handle, so
+                        // they're handled here rather than in handle_inbound.
+                        match &m {
+                            ControlMsg::StartMirror { epoch } => {
+                                if let Some(s) = mirror_rx_stop.take() {
+                                    s.store(true, std::sync::atomic::Ordering::Relaxed);
+                                }
+                                let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                                crate::mirror::spawn_receiver(
+                                    video_key,
+                                    *epoch,
+                                    core.video_frame.clone(),
+                                    stop.clone(),
+                                );
+                                mirror_rx_stop = Some(stop);
+                                let _ = core.events.send(NetEvent::Status(format!(
+                                    "Viewing {peer_name}'s screen"
+                                )));
+                            }
+                            ControlMsg::StopMirror => {
+                                if let Some(s) = mirror_rx_stop.take() {
+                                    s.store(true, std::sync::atomic::Ordering::Relaxed);
+                                }
+                                *core.video_frame.lock().unwrap() = None;
+                            }
+                            _ => {}
+                        }
                         if let Some(stop_reason) = handle_inbound(
                             &core, &role, m, key, &out_tx, &clip_tx, &peer_fp, &mut ping_sent,
                         ).await {
@@ -575,6 +629,26 @@ async fn run_session(
                             *h.edge.lock().unwrap() = edge;
                         }
                     }
+                    Some(SessionCmd::StartMirror) => {
+                        if mirror_tx_stop.is_none() {
+                            let epoch: u64 = rand::random();
+                            if out_tx.send(ControlMsg::StartMirror { epoch }).await.is_err() {
+                                break Ok(());
+                            }
+                            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                            crate::mirror::spawn_sender(peer_ip, video_key, epoch, stop.clone());
+                            mirror_tx_stop = Some(stop);
+                            let _ = core.events.send(NetEvent::Status(format!(
+                                "Sharing screen with {peer_name}"
+                            )));
+                        }
+                    }
+                    Some(SessionCmd::StopMirror) => {
+                        if let Some(s) = mirror_tx_stop.take() {
+                            s.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        let _ = out_tx.send(ControlMsg::StopMirror).await;
+                    }
                     _ => {}
                 }
             }
@@ -591,6 +665,13 @@ async fn run_session(
     // --- Teardown ---
     if let Some(h) = host_input {
         h.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(s) = mirror_tx_stop {
+        s.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(s) = mirror_rx_stop {
+        s.store(true, std::sync::atomic::Ordering::Relaxed);
+        *core.video_frame.lock().unwrap() = None;
     }
     let _ = clip_tx.send(clipboardsync::ClipCmd::Stop);
     if matches!(role, Role::Controlled) {
@@ -673,6 +754,9 @@ async fn handle_inbound(
         | ControlMsg::PairCancel { .. } => {
             // Pairing already settled; ignore stragglers.
         }
+        // Mirror start/stop are handled in the session loop (they need the
+        // session-local stop handle), so they're no-ops here.
+        ControlMsg::StartMirror { .. } | ControlMsg::StopMirror => {}
     }
     None
 }

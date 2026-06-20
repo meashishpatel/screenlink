@@ -16,6 +16,7 @@ mod icon;
 mod inputloop;
 mod logging;
 mod loopback;
+mod mirror;
 mod net;
 #[cfg(feature = "gui")]
 mod ui;
@@ -75,6 +76,7 @@ fn main() -> anyhow::Result<()> {
         injector,
         inbound_rt: Arc::new(Mutex::new(None)),
         make_capturer,
+        video_frame: Arc::new(Mutex::new(None)),
     };
 
     // --- Async runtime (background threads) ---

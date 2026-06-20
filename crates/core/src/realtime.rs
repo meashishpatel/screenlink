@@ -110,6 +110,21 @@ impl RealtimeCrypto {
     }
 }
 
+/// Derive an independent 32-byte sub-key from a base key for a separate stream
+/// (e.g. video vs input), so the two streams never share a (key, nonce) pair.
+pub fn derive_subkey(base: &[u8; 32], label: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"screenlink-subkey-v1");
+    h.update(base);
+    h.update([0u8]);
+    h.update(label);
+    let d = h.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&d);
+    out
+}
+
 /// Anti-replay sliding window (RFC 3711-style) over a 64-packet window.
 #[derive(Default)]
 pub struct ReplayWindow {

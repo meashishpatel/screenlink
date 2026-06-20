@@ -9,7 +9,7 @@ use screenlink_core::config::{AppConfig, PeerConfig};
 use screenlink_core::protocol::{Mode, ScreenEdge};
 use screenlink_core::trust::TrustStore;
 use screenlink_discovery::{Discovery, PeerSource};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -73,6 +73,10 @@ struct ScreenLinkApp {
     manual_ip: String,
     manual_port: String,
     last_selftest: Option<String>,
+    /// Fingerprints of peers we're currently sharing our screen to.
+    sharing: HashSet<String>,
+    /// Texture for the incoming mirrored screen, reused across frames.
+    video_texture: Option<egui::TextureHandle>,
     _tray: Option<tray_icon::TrayIcon>,
     tray_quit_id: Option<tray_icon::menu::MenuId>,
 }
@@ -104,6 +108,8 @@ impl ScreenLinkApp {
             manual_ip: String::new(),
             manual_port: screenlink_core::DEFAULT_CONTROL_PORT.to_string(),
             last_selftest: None,
+            sharing: HashSet::new(),
+            video_texture: None,
             _tray: tray,
             tray_quit_id,
         }
@@ -285,6 +291,11 @@ impl eframe::App for ScreenLinkApp {
             });
 
             ui.separator();
+            ui.collapsing("Screen mirror (experimental)", |ui| {
+                self.mirror_ui(ui);
+            });
+
+            ui.separator();
             ui.collapsing("Paired devices", |ui| {
                 self.paired_ui(ui);
             });
@@ -407,6 +418,75 @@ impl ScreenLinkApp {
             egui::FontId::proportional(12.0),
             egui::Color32::GRAY,
         );
+    }
+
+    fn mirror_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(
+            "Stream a screen between two connected devices. In a build without \
+             `--features extend`, the sender streams a moving test pattern so you can \
+             verify the path; with it, it streams the real screen.",
+        );
+
+        // Offer a share toggle for each currently-connected peer.
+        let connected: Vec<(String, String)> = self
+            .peers
+            .iter()
+            .filter(|(_, r)| matches!(r.state, ConnState::Connected { .. }))
+            .map(|(fp, r)| (fp.clone(), r.name.clone()))
+            .collect();
+        if connected.is_empty() {
+            ui.label("Connect to a device (Control) first, then you can share your screen to it.");
+        }
+        for (fp, name) in connected {
+            ui.horizontal(|ui| {
+                if self.sharing.contains(&fp) {
+                    if ui.button(format!("⏹ Stop sharing to {name}")).clicked() {
+                        self.send(NetCommand::StopShareScreen {
+                            fingerprint: fp.clone(),
+                        });
+                        self.sharing.remove(&fp);
+                    }
+                } else if ui.button(format!("🖥 Share my screen to {name}")).clicked() {
+                    self.send(NetCommand::ShareScreen {
+                        fingerprint: fp.clone(),
+                    });
+                    self.sharing.insert(fp.clone());
+                }
+            });
+        }
+
+        // Live view of an incoming mirrored screen.
+        ui.separator();
+        let frame = self
+            .deps
+            .core
+            .video_frame
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|f| (f.width, f.height, f.rgba.clone()));
+        match frame {
+            Some((w, h, rgba)) if w > 0 && h > 0 => {
+                let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                let tex = self.video_texture.get_or_insert_with(|| {
+                    ui.ctx()
+                        .load_texture("mirror", img.clone(), Default::default())
+                });
+                tex.set(img, Default::default());
+                let scale = (ui.available_width() / w as f32).min(1.0);
+                ui.image(egui::load::SizedTexture::new(
+                    tex.id(),
+                    egui::vec2(w as f32 * scale, h as f32 * scale),
+                ));
+                ui.label(format!("Receiving {w}×{h}"));
+                ui.ctx().request_repaint_after(Duration::from_millis(50));
+            }
+            _ => {
+                ui.label(
+                    "(no incoming screen — ask the other device to share, or click Share above)",
+                );
+            }
+        }
     }
 
     fn manual_ui(&mut self, ui: &mut egui::Ui) {

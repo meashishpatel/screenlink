@@ -26,8 +26,11 @@ pub const MDNS_SERVICE_TYPE: &str = "_screenlink._tcp.local.";
 /// Default TCP port for the TLS control channel.
 pub const DEFAULT_CONTROL_PORT: u16 = 47820;
 
-/// Default UDP port for the encrypted realtime channel.
+/// Default UDP port for the encrypted realtime channel (input events).
 pub const DEFAULT_REALTIME_PORT: u16 = 47821;
+
+/// Default UDP port for the encrypted video channel (Extend/Mirror mode).
+pub const DEFAULT_VIDEO_PORT: u16 = 47822;
 
 /// Ensure a process-wide rustls crypto provider is installed (ring).
 ///

@@ -315,6 +315,13 @@ pub enum ControlMsg {
         epoch: u64,
     },
 
+    /// Screen mirror: the sender will stream its screen as video on the video
+    /// channel; the receiver should start decoding/displaying it.
+    StartMirror {
+        epoch: u64,
+    },
+    StopMirror,
+
     // ---- Edge crossing handshake ----
     /// Control is entering the remote screen; `pos` is the normalized entry point
     /// (0..1) along/within the shared edge so the remote cursor appears correctly.

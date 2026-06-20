@@ -109,6 +109,7 @@ pub async fn drive() -> anyhow::Result<LoopbackReport> {
         )) as Box<dyn Injector>)),
         inbound_rt: Arc::new(Mutex::new(None)),
         make_capturer: Arc::new(|| Ok(Box::new(ScriptedCapturer::new()) as Box<dyn Capturer>)),
+        video_frame: Arc::new(Mutex::new(None)),
     };
 
     // Client B: controlled. Its injector records what it's told to do.
@@ -125,6 +126,7 @@ pub async fn drive() -> anyhow::Result<LoopbackReport> {
         )) as Box<dyn Injector>)),
         inbound_rt: Arc::new(Mutex::new(None)),
         make_capturer: Arc::new(|| anyhow::bail!("client never captures")),
+        video_frame: Arc::new(Mutex::new(None)),
     };
 
     tokio::spawn(net::run(core_a, cmd_a_rx));
