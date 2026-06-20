@@ -389,7 +389,6 @@ fn export_key<D>(conn: &rustls::ConnectionCommon<D>) -> anyhow::Result<[u8; 32]>
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 async fn run_session(
     core: AppCore,
     key: [u8; 32],

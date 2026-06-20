@@ -49,7 +49,9 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Build release binary
-        run: cargo build --release -p screenlink-app
+        # --features extend enables real screen capture (Desktop Duplication) so
+        # the Windows builds can mirror the actual screen, not just the test pattern.
+        run: cargo build --release -p screenlink-app --features extend
 
       - name: Sign binary
         if: ${{ env.CODE_SIGN_PFX_BASE64 != '' }}
