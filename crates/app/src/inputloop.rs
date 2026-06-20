@@ -73,6 +73,13 @@ pub fn spawn(
         .spawn(move || {
             let mut det = EdgeDetector::new(edge, hysteresis);
             let mut hotkey = HotkeyDetector::default();
+            // Virtual cursor position on the remote, normalized 0..1. We relay
+            // *absolute* position (not deltas) so a lost/reordered UDP packet
+            // can't permanently corrupt the cursor — the latest position wins.
+            let mut vrx = 0.5f32;
+            let mut vry = 0.5f32;
+            let inv_w = 1.0 / desktop.w.max(1) as f32;
+            let inv_h = 1.0 / desktop.h.max(1) as f32;
             let send_rt = |rt: &mut RealtimeCrypto, ev: InputEvent| {
                 if let Ok(payload) = postcard::to_stdvec(&ev) {
                     if let Ok(pkt) = rt.seal(&payload) {
@@ -111,6 +118,8 @@ pub fn spawn(
                                 capturer.park_cursor(abs_x, abs_y);
                                 let (ex, ey) =
                                     entry_point(*edge_shared.lock().unwrap(), entry_norm);
+                                vrx = ex;
+                                vry = ey;
                                 let _ =
                                     ctrl_tx.blocking_send(ControlMsg::EdgeEnter { x: ex, y: ey });
                                 let _ = events.send(NetEvent::ControlOnRemote(true));
@@ -118,7 +127,11 @@ pub fn spawn(
                             }
                         }
                         ControlSite::Remote => {
-                            send_rt(&mut rt, InputEvent::MouseMove { dx, dy });
+                            // Accumulate the delta into the virtual position and
+                            // relay the absolute position.
+                            vrx = (vrx + dx as f32 * inv_w).clamp(0.0, 1.0);
+                            vry = (vry + dy as f32 * inv_h).clamp(0.0, 1.0);
+                            send_rt(&mut rt, InputEvent::MouseMoveAbs { x: vrx, y: vry });
                             if det.update_remote(dx, dy).is_some() {
                                 capturer.set_suppress(false);
                                 let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);

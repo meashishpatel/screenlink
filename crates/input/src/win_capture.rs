@@ -138,11 +138,16 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             }
 
             if suppress {
-                // Keep the physical cursor parked at the seam.
+                // Keep the physical cursor parked at the seam. Only reset when the
+                // cursor has actually drifted — otherwise the synthetic move that
+                // SetCursorPos itself generates would trigger another reset, an
+                // infinite feedback storm that makes motion erratic.
                 if PARK_ON.load(Ordering::Relaxed) {
                     let px = PARK_X.load(Ordering::Relaxed);
                     let py = PARK_Y.load(Ordering::Relaxed);
-                    let _ = SetCursorPos(px, py);
+                    if x != px || y != py {
+                        let _ = SetCursorPos(px, py);
+                    }
                     LAST_X.store(px, Ordering::Relaxed);
                     LAST_Y.store(py, Ordering::Relaxed);
                 }

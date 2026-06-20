@@ -58,7 +58,19 @@ pub fn run(target: IpAddr, port: u16, timeout: Duration) -> SelfTestResult {
                 .to_string(),
             local_ip,
         },
-        Err(e) => classify_error(e, local_ip),
+        Err(e) => {
+            let mut r = classify_error(e, local_ip);
+            // AP-isolation/firewall messaging makes no sense for a loopback target
+            // (nothing is "in between"); report it plainly as a closed port.
+            if target.is_loopback() && r.verdict == Verdict::Unreachable {
+                r.verdict = Verdict::PortClosed;
+                r.message =
+                    "Nothing is listening on that local port (this is localhost — no network \
+                     in between)."
+                        .to_string();
+            }
+            r
+        }
     }
 }
 

@@ -373,21 +373,23 @@ impl ScreenLinkApp {
                 }
             }
         });
-        // Tiny arrangement sketch.
+        // Tiny arrangement sketch. The canvas must be tall enough for the
+        // vertical (Top/Bottom) layouts, not just left/right.
         let (resp, painter) = ui.allocate_painter(
-            egui::vec2(ui.available_width().min(320.0), 120.0),
+            egui::vec2(ui.available_width().min(320.0), 170.0),
             egui::Sense::hover(),
         );
         let rect = resp.rect;
-        let host = egui::Rect::from_center_size(rect.center(), egui::vec2(80.0, 60.0));
-        let off = 92.0;
+        let box_size = egui::vec2(66.0, 44.0);
+        let host = egui::Rect::from_center_size(rect.center(), box_size);
+        let off = 58.0;
         let peer_center = match self.selected_edge {
             ScreenEdge::Right => host.center() + egui::vec2(off, 0.0),
             ScreenEdge::Left => host.center() - egui::vec2(off, 0.0),
             ScreenEdge::Top => host.center() - egui::vec2(0.0, off),
             ScreenEdge::Bottom => host.center() + egui::vec2(0.0, off),
         };
-        let peer = egui::Rect::from_center_size(peer_center, egui::vec2(80.0, 60.0));
+        let peer = egui::Rect::from_center_size(peer_center, box_size);
         let stroke = egui::Stroke::new(1.5, egui::Color32::GRAY);
         painter.rect_stroke(host, 4.0, egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE));
         painter.rect_stroke(peer, 4.0, stroke);

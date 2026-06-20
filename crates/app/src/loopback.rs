@@ -27,10 +27,13 @@ pub struct LoopbackReport {
 
 impl LoopbackReport {
     pub fn passed(&self) -> bool {
-        let has_move = self
-            .injected
-            .iter()
-            .any(|e| matches!(e, InputEvent::MouseMove { .. }));
+        // The host relays absolute position (MouseMoveAbs); accept either form.
+        let has_move = self.injected.iter().any(|e| {
+            matches!(
+                e,
+                InputEvent::MouseMove { .. } | InputEvent::MouseMoveAbs { .. }
+            )
+        });
         let has_button = self
             .injected
             .iter()
