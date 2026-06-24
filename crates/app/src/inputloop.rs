@@ -80,6 +80,16 @@ pub fn spawn(
             let mut vry = 0.5f32;
             let inv_w = 1.0 / desktop.w.max(1) as f32;
             let inv_h = 1.0 / desktop.h.max(1) as f32;
+            // What the user is physically holding (modifier keys), tracked
+            // regardless of which side has control. Used to seed the remote's
+            // modifier state when control crosses over.
+            let mut held_mods_local: Vec<Key> = Vec::new();
+            // What we've told the remote is pressed (and not yet released).
+            // On transition back to local we release each one so a modifier
+            // can't get stuck after the snap-home chord or an edge return —
+            // that "stuck Ctrl/Alt" is what made the keyboard look like it
+            // randomly stopped working.
+            let mut held_remote: Vec<Key> = Vec::new();
             let send_rt = |rt: &mut RealtimeCrypto, ev: InputEvent| {
                 if let Ok(payload) = postcard::to_stdvec(&ev) {
                     if let Ok(pkt) = rt.seal(&payload) {
@@ -95,6 +105,9 @@ pub fn spawn(
 
                 if snap_home.swap(false, Ordering::Relaxed) && det.force_home().is_some() {
                     capturer.set_suppress(false);
+                    for k in held_remote.drain(..) {
+                        send_rt(&mut rt, InputEvent::Key { key: k, pressed: false });
+                    }
                     let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
                     let _ = events.send(NetEvent::Status("Control snapped home".into()));
                 }
@@ -114,14 +127,35 @@ pub fn spawn(
                             if let Some(screenlink_input::Transition::ToRemote { entry_norm }) =
                                 det.update_local(abs_x, abs_y, desktop)
                             {
+                                let edge_now = *edge_shared.lock().unwrap();
                                 capturer.set_suppress(true);
-                                capturer.park_cursor(abs_x, abs_y);
-                                let (ex, ey) =
-                                    entry_point(*edge_shared.lock().unwrap(), entry_norm);
+                                // Park *back from* the crossed edge so the local
+                                // cursor has room to move in every direction; if
+                                // we parked at the seam, info.pt couldn't move
+                                // off-screen and a "push deeper" wouldn't
+                                // produce a delta — only the user's back-into-
+                                // desktop wobble would, so the remote cursor
+                                // appeared to move opposite the user's intent.
+                                let (px, py) =
+                                    park_position(edge_now, abs_x, abs_y, desktop);
+                                capturer.park_cursor(px, py);
+                                let (ex, ey) = entry_point(edge_now, entry_norm);
                                 vrx = ex;
                                 vry = ey;
                                 let _ =
                                     ctrl_tx.blocking_send(ControlMsg::EdgeEnter { x: ex, y: ey });
+                                // Seed the remote's modifier state with anything
+                                // the user is already holding, so Shift+A etc.
+                                // type correctly the first key after crossing.
+                                for k in &held_mods_local {
+                                    if !held_remote.contains(k) {
+                                        send_rt(
+                                            &mut rt,
+                                            InputEvent::Key { key: *k, pressed: true },
+                                        );
+                                        held_remote.push(*k);
+                                    }
+                                }
                                 let _ = events.send(NetEvent::ControlOnRemote(true));
                                 debug!("crossed to remote at ({ex:.2},{ey:.2})");
                             }
@@ -134,6 +168,12 @@ pub fn spawn(
                             send_rt(&mut rt, InputEvent::MouseMoveAbs { x: vrx, y: vry });
                             if det.update_remote(dx, dy).is_some() {
                                 capturer.set_suppress(false);
+                                for k in held_remote.drain(..) {
+                                    send_rt(
+                                        &mut rt,
+                                        InputEvent::Key { key: k, pressed: false },
+                                    );
+                                }
                                 let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
                                 let _ = events.send(NetEvent::ControlOnRemote(false));
                                 debug!("returned to local");
@@ -141,14 +181,37 @@ pub fn spawn(
                         }
                     },
                     CapturedEvent::Input(ie) => {
-                        // Snap-home chord is handled locally and never relayed.
                         if let InputEvent::Key { key, pressed } = &ie {
+                            // Always track physical modifier state, regardless
+                            // of where control lives — so the next cross to
+                            // remote can re-press whatever the user is holding.
+                            if is_modifier(*key) {
+                                if *pressed {
+                                    if !held_mods_local.contains(key) {
+                                        held_mods_local.push(*key);
+                                    }
+                                } else {
+                                    held_mods_local.retain(|k| k != key);
+                                }
+                            }
+                            // Snap-home chord is handled locally and never relayed.
                             if hotkey.on_key(*key, *pressed) {
                                 snap_home.store(true, Ordering::Relaxed);
                                 continue;
                             }
                         }
                         if det.site() == ControlSite::Remote {
+                            // Mirror remote's view of the keyboard so we can
+                            // release everything cleanly on the way home.
+                            if let InputEvent::Key { key, pressed } = &ie {
+                                if *pressed {
+                                    if !held_remote.contains(key) {
+                                        held_remote.push(*key);
+                                    }
+                                } else {
+                                    held_remote.retain(|k| k != key);
+                                }
+                            }
                             send_rt(&mut rt, ie);
                         }
                     }
@@ -163,6 +226,20 @@ pub fn spawn(
     handle
 }
 
+fn is_modifier(k: Key) -> bool {
+    matches!(
+        k,
+        Key::ControlLeft
+            | Key::ControlRight
+            | Key::AltLeft
+            | Key::AltRight
+            | Key::ShiftLeft
+            | Key::ShiftRight
+            | Key::MetaLeft
+            | Key::MetaRight
+    )
+}
+
 /// Map a normalized position along the shared edge to the entry point on the
 /// remote desktop (normalized 0..1, 0..1).
 fn entry_point(edge: ScreenEdge, along: f32) -> (f32, f32) {
@@ -173,6 +250,36 @@ fn entry_point(edge: ScreenEdge, along: f32) -> (f32, f32) {
         ScreenEdge::Bottom => (along, 0.0),
         ScreenEdge::Top => (along, 1.0),
     }
+}
+
+/// Choose where on the local desktop to park the physical cursor while control
+/// is on the remote: a point backed off from the crossed edge, clamped well
+/// inside the desktop so the cursor has headroom to move in both directions
+/// along every axis.
+fn park_position(
+    edge: ScreenEdge,
+    abs_x: i32,
+    abs_y: i32,
+    desktop: screenlink_input::Rect,
+) -> (i32, i32) {
+    const BUFFER: i32 = 200;
+    let (mut px, mut py) = match edge {
+        ScreenEdge::Right => (abs_x - BUFFER, abs_y),
+        ScreenEdge::Left => (abs_x + BUFFER, abs_y),
+        ScreenEdge::Bottom => (abs_x, abs_y - BUFFER),
+        ScreenEdge::Top => (abs_x, abs_y + BUFFER),
+    };
+    let min_x = desktop.x + BUFFER;
+    let max_x = desktop.x + desktop.w - 1 - BUFFER;
+    let min_y = desktop.y + BUFFER;
+    let max_y = desktop.y + desktop.h - 1 - BUFFER;
+    if max_x > min_x {
+        px = px.clamp(min_x, max_x);
+    }
+    if max_y > min_y {
+        py = py.clamp(min_y, max_y);
+    }
+    (px, py)
 }
 
 #[cfg(test)]

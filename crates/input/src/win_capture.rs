@@ -14,7 +14,7 @@ use crate::keymap_win::key_for_vk;
 use crate::win_inject::INJECT_SIGNATURE;
 use crate::{CapturedEvent, Capturer};
 use screenlink_core::protocol::{InputEvent, MouseButton};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -37,6 +37,9 @@ static LAST_Y: AtomicI32 = AtomicI32::new(0);
 static PARK_ON: AtomicBool = AtomicBool::new(false);
 static PARK_X: AtomicI32 = AtomicI32::new(0);
 static PARK_Y: AtomicI32 = AtomicI32::new(0);
+// Drops the first few WM_MOUSEMOVE deltas after a park, so the cursor's
+// edge→park snap isn't itself relayed as a huge bogus motion.
+static PARK_SKIP: AtomicU32 = AtomicU32::new(0);
 
 pub struct WinCapturer {
     rx: Receiver<CapturedEvent>,
@@ -86,6 +89,7 @@ impl Capturer for WinCapturer {
         SUPPRESS.store(suppress, Ordering::Relaxed);
         if !suppress {
             PARK_ON.store(false, Ordering::Relaxed);
+            PARK_SKIP.store(0, Ordering::Relaxed);
         }
     }
 
@@ -95,6 +99,16 @@ impl Capturer for WinCapturer {
         PARK_ON.store(true, Ordering::Relaxed);
         LAST_X.store(x, Ordering::Relaxed);
         LAST_Y.store(y, Ordering::Relaxed);
+        // Eat the next few moves so the snap from edge to park doesn't relay as
+        // a giant delta into the remote.
+        PARK_SKIP.store(4, Ordering::Relaxed);
+        // Physically move the cursor now — otherwise the hook keeps reading
+        // info.pt at the old (edge) position, dx stays zero in the off-screen
+        // direction, and only the user's back-toward-the-desktop wobble gets
+        // relayed (which looked like inverted motion).
+        unsafe {
+            let _ = SetCursorPos(x, y);
+        }
     }
 }
 
@@ -128,7 +142,10 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             LAST_X.store(x, Ordering::Relaxed);
             LAST_Y.store(y, Ordering::Relaxed);
 
-            if dx != 0 || dy != 0 {
+            let skip = PARK_SKIP.load(Ordering::Relaxed);
+            if skip > 0 {
+                PARK_SKIP.fetch_sub(1, Ordering::Relaxed);
+            } else if dx != 0 || dy != 0 {
                 send(CapturedEvent::Move {
                     dx,
                     dy,
