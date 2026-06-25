@@ -259,7 +259,10 @@ pub enum InputEvent {
         button: MouseButton,
         pressed: bool,
     },
-    /// Wheel deltas in WHEEL_DELTA (120) units; `dy` vertical, `dx` horizontal.
+    /// Wheel deltas in raw Windows wheel units (±120 = one discrete notch;
+    /// touchpad fine scroll produces much smaller values). `dy` vertical,
+    /// `dx` horizontal. Non-Windows backends scale to/from their native
+    /// tick unit at the edge.
     MouseWheel {
         dx: i32,
         dy: i32,

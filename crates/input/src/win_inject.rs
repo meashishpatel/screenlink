@@ -27,7 +27,6 @@ pub(crate) const INJECT_SIGNATURE: usize = 0x5C11_5C11;
 
 const XBUTTON1: u32 = 0x0001;
 const XBUTTON2: u32 = 0x0002;
-const WHEEL_DELTA: i32 = 120;
 
 pub fn set_dpi_aware() {
     unsafe {
@@ -87,12 +86,13 @@ impl Injector for WinInjector {
                 mouse_input(0, 0, data, flags)
             }
             InputEvent::MouseWheel { dx, dy } => {
-                // Send vertical first; if both, two events would be needed — keep
-                // it simple and prefer vertical, then horizontal.
+                // Protocol carries raw wheel units (Windows WHEEL_DELTA basis:
+                // ±120 per notch, smaller for touchpad fine scroll) — pass
+                // straight through to SendInput's mouseData.
                 if dy != 0 {
-                    mouse_input(0, 0, (dy * WHEEL_DELTA) as u32, MOUSEEVENTF_WHEEL)
+                    mouse_input(0, 0, dy as u32, MOUSEEVENTF_WHEEL)
                 } else {
-                    mouse_input(0, 0, (dx * WHEEL_DELTA) as u32, MOUSEEVENTF_HWHEEL)
+                    mouse_input(0, 0, dx as u32, MOUSEEVENTF_HWHEEL)
                 }
             }
             InputEvent::Key { key, pressed } => return inject_key(key, pressed),

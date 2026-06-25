@@ -105,10 +105,14 @@ fn apply_event(enigo: &mut Enigo, ev: InputEvent, w: i32, h: i32) {
             None => Ok(()),
         },
         InputEvent::MouseWheel { dx, dy } => {
+            // Protocol units are raw Windows wheel deltas (±120 per notch).
+            // enigo expects ticks, so divide. Fine sub-tick deltas are lost on
+            // the Unix client — acceptable since this backend is experimental.
+            const WHEEL_DELTA: i32 = 120;
             if dy != 0 {
-                enigo.scroll(-dy, Axis::Vertical)
+                enigo.scroll(-(dy / WHEEL_DELTA), Axis::Vertical)
             } else {
-                enigo.scroll(dx, Axis::Horizontal)
+                enigo.scroll(dx / WHEEL_DELTA, Axis::Horizontal)
             }
         }
         InputEvent::Key { key, pressed } => match to_enigo_key(key) {
@@ -359,9 +363,13 @@ fn grab_callback(event: rdev::Event) -> Option<rdev::Event> {
             pressed: false,
         })),
         EventType::Wheel { delta_x, delta_y } => {
+            // rdev reports ticks; scale up to the protocol's raw-wheel units
+            // (Windows WHEEL_DELTA = 120 per notch) so a Windows client injects
+            // the right amount.
+            const WHEEL_DELTA: i32 = 120;
             send_cap(CapturedEvent::Input(InputEvent::MouseWheel {
-                dx: delta_x as i32,
-                dy: delta_y as i32,
+                dx: (delta_x as i32) * WHEEL_DELTA,
+                dy: (delta_y as i32) * WHEEL_DELTA,
             }))
         }
     }

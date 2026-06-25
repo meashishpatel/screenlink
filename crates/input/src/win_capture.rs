@@ -28,8 +28,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
 
-const WHEEL_DELTA: i32 = 120;
-
 static EVENT_TX: OnceLock<SyncSender<CapturedEvent>> = OnceLock::new();
 static SUPPRESS: AtomicBool = AtomicBool::new(false);
 static LAST_X: AtomicI32 = AtomicI32::new(0);
@@ -195,12 +193,16 @@ fn mouse_button_or_wheel(msg: u32, info: &MSLLHOOKSTRUCT) -> Option<InputEvent> 
         WM_MBUTTONUP => Some(btn(MouseButton::Middle, false)),
         WM_XBUTTONDOWN => Some(btn(xbutton(high), true)),
         WM_XBUTTONUP => Some(btn(xbutton(high), false)),
+        // Pass the raw wheel delta through (±120 per notch on a discrete wheel,
+        // much smaller for touchpad fine scroll). Integer-dividing here would
+        // round touchpad scrolls down to zero — that's why two-finger scrolling
+        // on the remote was a no-op.
         WM_MOUSEWHEEL => Some(InputEvent::MouseWheel {
             dx: 0,
-            dy: (high as i16 as i32) / WHEEL_DELTA,
+            dy: high as i16 as i32,
         }),
         WM_MOUSEHWHEEL => Some(InputEvent::MouseWheel {
-            dx: (high as i16 as i32) / WHEEL_DELTA,
+            dx: high as i16 as i32,
             dy: 0,
         }),
         _ => None,
