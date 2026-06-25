@@ -106,7 +106,13 @@ pub fn spawn(
                 if snap_home.swap(false, Ordering::Relaxed) && det.force_home().is_some() {
                     capturer.set_suppress(false);
                     for k in held_remote.drain(..) {
-                        send_rt(&mut rt, InputEvent::Key { key: k, pressed: false });
+                        send_rt(
+                            &mut rt,
+                            InputEvent::Key {
+                                key: k,
+                                pressed: false,
+                            },
+                        );
                     }
                     let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
                     let _ = events.send(NetEvent::Status("Control snapped home".into()));
@@ -136,8 +142,7 @@ pub fn spawn(
                                 // produce a delta — only the user's back-into-
                                 // desktop wobble would, so the remote cursor
                                 // appeared to move opposite the user's intent.
-                                let (px, py) =
-                                    park_position(edge_now, abs_x, abs_y, desktop);
+                                let (px, py) = park_position(edge_now, abs_x, abs_y, desktop);
                                 capturer.park_cursor(px, py);
                                 let (ex, ey) = entry_point(edge_now, entry_norm);
                                 vrx = ex;
@@ -151,7 +156,10 @@ pub fn spawn(
                                     if !held_remote.contains(k) {
                                         send_rt(
                                             &mut rt,
-                                            InputEvent::Key { key: *k, pressed: true },
+                                            InputEvent::Key {
+                                                key: *k,
+                                                pressed: true,
+                                            },
                                         );
                                         held_remote.push(*k);
                                     }
@@ -171,7 +179,10 @@ pub fn spawn(
                                 for k in held_remote.drain(..) {
                                     send_rt(
                                         &mut rt,
-                                        InputEvent::Key { key: k, pressed: false },
+                                        InputEvent::Key {
+                                            key: k,
+                                            pressed: false,
+                                        },
                                     );
                                 }
                                 let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
