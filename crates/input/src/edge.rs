@@ -119,7 +119,12 @@ impl EdgeDetector {
             ScreenEdge::Bottom => dy,
             ScreenEdge::Top => -dy,
         };
-        self.perp_into += into_delta;
+        // Cap the positive side at `hysteresis` so no matter how far the user
+        // has navigated into the remote, pushing back by `hysteresis` pixels is
+        // always enough to return. Without this cap, `perp_into` accumulates
+        // every rightward delta and the cursor effectively gets stuck on the
+        // remote — the user has to push back by however far they went in.
+        self.perp_into = (self.perp_into + into_delta).min(self.hysteresis);
         if self.perp_into <= 0 {
             self.site = ControlSite::Local;
             self.perp_into = 0;
@@ -173,14 +178,29 @@ mod tests {
     fn returns_home_after_pulling_back_past_hysteresis() {
         let mut d = EdgeDetector::new(ScreenEdge::Right, 20);
         d.update_local(1919, 540, screen()); // now remote, perp_into = 20
-                                             // Push further right: stays remote.
+                                             // Pushing further right is capped at hysteresis: stays remote.
         assert_eq!(d.update_remote(50, 0), None);
-        // Pull left a little: still remote.
-        assert_eq!(d.update_remote(-30, 0), None);
-        // Pull left enough to cross back: returns home.
-        let t = d.update_remote(-50, 0);
+        // Pulling left less than hysteresis: still remote.
+        assert_eq!(d.update_remote(-10, 0), None);
+        // Pulling left past the remaining hysteresis: returns home.
+        let t = d.update_remote(-20, 0);
         assert_eq!(t, Some(Transition::ToLocal));
         assert_eq!(d.site(), ControlSite::Local);
+    }
+
+    #[test]
+    fn deep_navigation_does_not_strand_user_on_remote() {
+        // Regression: previously `perp_into` grew unbounded as the user moved
+        // deeper into the remote, so returning home took an equally huge
+        // back-push. With the cap, hysteresis pixels of back-push is enough.
+        let mut d = EdgeDetector::new(ScreenEdge::Right, 25);
+        d.update_local(1919, 540, screen()); // remote, perp_into = 25
+        for _ in 0..50 {
+            // Navigate far rightward on the remote (1000 px total).
+            assert_eq!(d.update_remote(20, 0), None);
+        }
+        // A single back-push of hysteresis returns home.
+        assert_eq!(d.update_remote(-25, 0), Some(Transition::ToLocal));
     }
 
     #[test]

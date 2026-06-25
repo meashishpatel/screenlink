@@ -14,6 +14,12 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
+/// How many copies of each modifier press/release we send on edge transitions.
+/// They go over UDP, which can drop packets; missing a press leaves the remote
+/// unaware that Shift/Ctrl/Alt is held, missing a release leaves a key stuck.
+/// Three copies is cheap (~150 bytes) and makes a single drop a non-event.
+const MOD_SYNC_REPEAT: usize = 3;
+
 /// Controls the running host input loop from the session/UI.
 pub struct HostInputHandle {
     pub stop: Arc<AtomicBool>,
@@ -106,13 +112,17 @@ pub fn spawn(
                 if snap_home.swap(false, Ordering::Relaxed) && det.force_home().is_some() {
                     capturer.set_suppress(false);
                     for k in held_remote.drain(..) {
-                        send_rt(
-                            &mut rt,
-                            InputEvent::Key {
-                                key: k,
-                                pressed: false,
-                            },
-                        );
+                        // Sent over UDP — duplicate so a single dropped packet
+                        // doesn't strand the remote with a stuck modifier.
+                        for _ in 0..MOD_SYNC_REPEAT {
+                            send_rt(
+                                &mut rt,
+                                InputEvent::Key {
+                                    key: k,
+                                    pressed: false,
+                                },
+                            );
+                        }
                     }
                     let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
                     let _ = events.send(NetEvent::Status("Control snapped home".into()));
@@ -154,13 +164,15 @@ pub fn spawn(
                                 // type correctly the first key after crossing.
                                 for k in &held_mods_local {
                                     if !held_remote.contains(k) {
-                                        send_rt(
-                                            &mut rt,
-                                            InputEvent::Key {
-                                                key: *k,
-                                                pressed: true,
-                                            },
-                                        );
+                                        for _ in 0..MOD_SYNC_REPEAT {
+                                            send_rt(
+                                                &mut rt,
+                                                InputEvent::Key {
+                                                    key: *k,
+                                                    pressed: true,
+                                                },
+                                            );
+                                        }
                                         held_remote.push(*k);
                                     }
                                 }
@@ -177,13 +189,15 @@ pub fn spawn(
                             if det.update_remote(dx, dy).is_some() {
                                 capturer.set_suppress(false);
                                 for k in held_remote.drain(..) {
-                                    send_rt(
-                                        &mut rt,
-                                        InputEvent::Key {
-                                            key: k,
-                                            pressed: false,
-                                        },
-                                    );
+                                    for _ in 0..MOD_SYNC_REPEAT {
+                                        send_rt(
+                                            &mut rt,
+                                            InputEvent::Key {
+                                                key: k,
+                                                pressed: false,
+                                            },
+                                        );
+                                    }
                                 }
                                 let _ = ctrl_tx.blocking_send(ControlMsg::EdgeLeave);
                                 let _ = events.send(NetEvent::ControlOnRemote(false));
