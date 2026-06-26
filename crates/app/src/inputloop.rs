@@ -186,7 +186,18 @@ pub fn spawn(
                             vrx = (vrx + dx as f32 * inv_w).clamp(0.0, 1.0);
                             vry = (vry + dy as f32 * inv_h).clamp(0.0, 1.0);
                             send_rt(&mut rt, InputEvent::MouseMoveAbs { x: vrx, y: vry });
-                            if det.update_remote(dx, dy).is_some() {
+                            // Only count return-home pressure when the virtual
+                            // cursor is pinned against the seam edge of the
+                            // remote — i.e., the user has navigated all the
+                            // way back to the side they entered from.
+                            let edge_now = *edge_shared.lock().unwrap();
+                            let at_return_edge = match edge_now {
+                                ScreenEdge::Right => vrx <= 1e-4,
+                                ScreenEdge::Left => vrx >= 1.0 - 1e-4,
+                                ScreenEdge::Bottom => vry <= 1e-4,
+                                ScreenEdge::Top => vry >= 1.0 - 1e-4,
+                            };
+                            if det.update_remote(dx, dy, at_return_edge).is_some() {
                                 capturer.set_suppress(false);
                                 for k in held_remote.drain(..) {
                                     for _ in 0..MOD_SYNC_REPEAT {

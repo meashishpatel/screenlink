@@ -29,7 +29,10 @@ jobs:
       - name: Build
         run: cargo build --workspace --release
       - name: Test
-        run: cargo test --workspace
+        # --test-threads=1 avoids a teardown race between the loopback test's
+        # TLS/UDP runtime drop and other tests dropping in parallel — manifests
+        # as STATUS_HEAP_CORRUPTION on Windows.
+        run: cargo test --workspace -- --test-threads=1
 
   # Cross-platform compile-check + tests for the shared/headless code (transport,
   # protocol, crypto, input abstraction, and the loopback integration test). The
@@ -55,4 +58,4 @@ jobs:
       - name: Build (headless)
         run: cargo build --workspace --no-default-features
       - name: Test (headless, incl. loopback)
-        run: cargo test --workspace --no-default-features
+        run: cargo test --workspace --no-default-features -- --test-threads=1
