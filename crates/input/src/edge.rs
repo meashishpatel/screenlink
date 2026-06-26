@@ -115,12 +115,7 @@ impl EdgeDetector {
     /// counts toward returning home — that way ordinary mid-remote navigation
     /// can't accidentally send control back, and "press into the edge"
     /// mirrors how the user crossed in.
-    pub fn update_remote(
-        &mut self,
-        dx: i32,
-        dy: i32,
-        at_return_edge: bool,
-    ) -> Option<Transition> {
+    pub fn update_remote(&mut self, dx: i32, dy: i32, at_return_edge: bool) -> Option<Transition> {
         if self.site != ControlSite::Remote {
             return None;
         }
