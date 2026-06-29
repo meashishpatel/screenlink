@@ -145,15 +145,12 @@ pub fn spawn(
                             {
                                 let edge_now = *edge_shared.lock().unwrap();
                                 capturer.set_suppress(true);
-                                // Park *back from* the crossed edge so the local
-                                // cursor has room to move in every direction; if
-                                // we parked at the seam, info.pt couldn't move
-                                // off-screen and a "push deeper" wouldn't
-                                // produce a delta — only the user's back-into-
-                                // desktop wobble would, so the remote cursor
-                                // appeared to move opposite the user's intent.
-                                let (px, py) = park_position(edge_now, abs_x, abs_y, desktop);
-                                capturer.park_cursor(px, py);
+                                // Park *at* the seam. Raw Input + ClipCursor
+                                // give us deltas independent of where the
+                                // cursor sits, so we no longer need to bump
+                                // it 200 px back inside the desktop just to
+                                // keep info.pt off the screen edge.
+                                capturer.park_cursor(abs_x, abs_y);
                                 let (ex, ey) = entry_point(edge_now, entry_norm);
                                 vrx = ex;
                                 vry = ey;
@@ -286,36 +283,6 @@ fn entry_point(edge: ScreenEdge, along: f32) -> (f32, f32) {
         ScreenEdge::Bottom => (along, 0.0),
         ScreenEdge::Top => (along, 1.0),
     }
-}
-
-/// Choose where on the local desktop to park the physical cursor while control
-/// is on the remote: a point backed off from the crossed edge, clamped well
-/// inside the desktop so the cursor has headroom to move in both directions
-/// along every axis.
-fn park_position(
-    edge: ScreenEdge,
-    abs_x: i32,
-    abs_y: i32,
-    desktop: screenlink_input::Rect,
-) -> (i32, i32) {
-    const BUFFER: i32 = 200;
-    let (mut px, mut py) = match edge {
-        ScreenEdge::Right => (abs_x - BUFFER, abs_y),
-        ScreenEdge::Left => (abs_x + BUFFER, abs_y),
-        ScreenEdge::Bottom => (abs_x, abs_y - BUFFER),
-        ScreenEdge::Top => (abs_x, abs_y + BUFFER),
-    };
-    let min_x = desktop.x + BUFFER;
-    let max_x = desktop.x + desktop.w - 1 - BUFFER;
-    let min_y = desktop.y + BUFFER;
-    let max_y = desktop.y + desktop.h - 1 - BUFFER;
-    if max_x > min_x {
-        px = px.clamp(min_x, max_x);
-    }
-    if max_y > min_y {
-        py = py.clamp(min_y, max_y);
-    }
-    (px, py)
 }
 
 #[cfg(test)]
